@@ -1,0 +1,27 @@
+{
+    "src": "00000.m2ts",
+    "template": "template\\main.vpy",
+    "param": "--preset slow --crf 17",
+    "video": "hevc",
+    "audio": [
+        {
+            "track": 2,
+            "codec": "flac",
+            "language": "jpn"
+        },
+        {
+            "track": 3,
+            "codec": "opus",
+            "bitrate": 128,
+            "language": "eng"
+        }
+    ],
+    "demux": [
+        {
+            "track": 5,
+            "format": "sup",
+            "language": "jpn"
+        }
+    ],
+    "hardsub": "00000.ass"
+}
