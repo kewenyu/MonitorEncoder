@@ -29,8 +29,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
 )
@@ -128,23 +130,32 @@ func main() {
 			buffer := bufio.NewReader(os.Stdin)
 			line, err := buffer.ReadString('\n')
 			if err != nil {
+				if err == io.EOF {
+					return
+				}
 				fmt.Printf("input error: %s\n", err.Error())
+				continue
 			}
 
 			userInputStream <- strings.TrimSpace(line)
 		}
 	}()
 
+	signalInt := make(chan os.Signal, 1)
+	signal.Notify(signalInt, os.Interrupt)
+
 mainLoop:
 	for {
 		select {
+		case <-signalInt:
+			log.Println("[info] receive SIGINT")
+			break mainLoop
 		case userInput := <-userInputStream:
 			if userInput == "status" {
 				status.PrintAllStatus()
 				continue
 			} else if userInput == "stop" {
 				log.Println("[info] user stop")
-				mainCtxCancelFunc()
 				break mainLoop
 			} else {
 				fmt.Printf("unknown command: %s\n", userInput)
@@ -153,6 +164,7 @@ mainLoop:
 		}
 	}
 
+	mainCtxCancelFunc()
 	wg.Wait()
 
 	log.Println("[info] all finish")
