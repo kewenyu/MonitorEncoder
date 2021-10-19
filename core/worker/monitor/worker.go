@@ -101,13 +101,6 @@ func (w *Worker) workerLoop(ctx context.Context) {
 			break
 		}
 
-		select {
-		case <-ctx.Done():
-			exitFlag = true
-			continue
-		default:
-		}
-
 		newTaskPath := w.checkNewTask(ctx)
 		if newTaskPath != "" {
 			newTask, err := common.NewTaskFromJson(newTaskPath)
@@ -136,7 +129,13 @@ func (w *Worker) workerLoop(ctx context.Context) {
 			}
 		}
 
-		time.Sleep(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			exitFlag = true
+			continue
+		case <-time.After(1 * time.Second):
+			continue
+		}
 	}
 }
 
