@@ -19,17 +19,18 @@
 package common
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 )
 
 var binPathMap = map[string]string{
-	"eac3toPath":   "eac3to\\eac3to.exe",
-	"vspipePath":   "vspipe.exe",
-	"x265Path":     "x265-10b.exe",
-	"x264Path":     "x264_64.exe",
-	"opusencPath":  "opusenc.exe",
-	"qaacPath":     "qaac.exe",
+	"eac3toPath":  "eac3to\\eac3to.exe",
+	"vspipePath":  "vspipe.exe",
+	"x265Path":    "x265-10b.exe",
+	"x264Path":    "x264_64.exe",
+	"opusencPath": "opusenc.exe",
+	"qaacPath":    "qaac.exe",
 }
 
 func init() {
@@ -39,6 +40,15 @@ func init() {
 			binPathMap[k] = filepath.Join(binPathBase, v)
 		}
 	}
+}
+
+func CheckToolsAvailability() error {
+	for _, path := range binPathMap {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return errors.New(path + " not exist")
+		}
+	}
+	return nil
 }
 
 func GetEac3toPath() string {

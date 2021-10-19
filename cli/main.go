@@ -46,6 +46,12 @@ func main() {
 	)
 	flag.Parse()
 
+	err := common.CheckToolsAvailability()
+	if err != nil {
+		log.Printf("[fatal] external tool not available: %s", err.Error())
+		return
+	}
+
 	var wg sync.WaitGroup
 	mainCtx, mainCtxCancelFunc := context.WithCancel(context.Background())
 	defer mainCtxCancelFunc()
