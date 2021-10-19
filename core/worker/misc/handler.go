@@ -20,12 +20,13 @@ package misc
 
 import (
 	"MonitorEncoder/core/common"
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
 )
 
-type AudioCodecHandler func(string, string, *common.AudioTask) (string, error)
+type AudioCodecHandler func(context.Context, string, string, *common.AudioTask) (string, error)
 
 var AudioCodecHandlerMap = map[string]AudioCodecHandler{
 	"flac": handlerFLAC,
@@ -36,14 +37,14 @@ var AudioCodecHandlerMap = map[string]AudioCodecHandler{
 	"thd":  generateAudioCopyHandler("thd"),
 }
 
-func handlerFLAC(srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
+func handlerFLAC(ctx context.Context, srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
 	outputPath := common.GenerateNewFilePath(srcPath, workDirPath, "flac", audioTask.Language, audioTask.Track)
 
 	track := fmt.Sprintf("%d:", audioTask.Track)
 	eac3toParam := []string{srcPath, track, outputPath, "-log=NUL"}
 
 	eac3toPath := common.GetEac3toPath()
-	eac3toProcess := exec.Command(eac3toPath, eac3toParam...)
+	eac3toProcess := exec.CommandContext(ctx, eac3toPath, eac3toParam...)
 	err := eac3toProcess.Run()
 	if err != nil {
 		return "", err
@@ -52,7 +53,7 @@ func handlerFLAC(srcPath string, workDirPath string, audioTask *common.AudioTask
 	return outputPath, nil
 }
 
-func handlerOpus(srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
+func handlerOpus(ctx context.Context, srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
 	outputPath := common.GenerateNewFilePath(srcPath, workDirPath, "opus", audioTask.Language, audioTask.Track)
 
 	track := fmt.Sprintf("%d:", audioTask.Track)
@@ -65,10 +66,10 @@ func handlerOpus(srcPath string, workDirPath string, audioTask *common.AudioTask
 	opusencParam := []string{"--ignorelength", "--vbr", "--bitrate", bitrate, "-", outputPath}
 
 	eac3toPath := common.GetEac3toPath()
-	eac3toProcess := exec.Command(eac3toPath, eac3toParam...)
+	eac3toProcess := exec.CommandContext(ctx, eac3toPath, eac3toParam...)
 
 	opusencPath := common.GetOpusencPath()
-	opusencProcess := exec.Command(opusencPath, opusencParam...)
+	opusencProcess := exec.CommandContext(ctx, opusencPath, opusencParam...)
 	opusencProcess.Stdin, _ = eac3toProcess.StdoutPipe()
 
 	err := eac3toProcess.Start()
@@ -94,7 +95,7 @@ func handlerOpus(srcPath string, workDirPath string, audioTask *common.AudioTask
 	return outputPath, nil
 }
 
-func handlerAAC(srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
+func handlerAAC(ctx context.Context, srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
 	outputPath := common.GenerateNewFilePath(srcPath, workDirPath, "aac", audioTask.Language, audioTask.Track)
 
 	track := fmt.Sprintf("%d:", audioTask.Track)
@@ -107,10 +108,10 @@ func handlerAAC(srcPath string, workDirPath string, audioTask *common.AudioTask)
 	qaacParam := []string{"-R", "--adts", "-v", bitrate, "-o", outputPath, "-"}
 
 	eac3toPath := common.GetEac3toPath()
-	eac3toProcess := exec.Command(eac3toPath, eac3toParam...)
+	eac3toProcess := exec.CommandContext(ctx, eac3toPath, eac3toParam...)
 
 	qaacPath := common.GetQaacPath()
-	qaacProcess := exec.Command(qaacPath, qaacParam...)
+	qaacProcess := exec.CommandContext(ctx, qaacPath, qaacParam...)
 	qaacProcess.Stdin, _ = eac3toProcess.StdoutPipe()
 
 	err := eac3toProcess.Start()
@@ -137,14 +138,14 @@ func handlerAAC(srcPath string, workDirPath string, audioTask *common.AudioTask)
 }
 
 func generateAudioCopyHandler(ext string) AudioCodecHandler {
-	return func(srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
+	return func(ctx context.Context, srcPath string, workDirPath string, audioTask *common.AudioTask) (string, error) {
 		outputPath := common.GenerateNewFilePath(srcPath, workDirPath, ext, audioTask.Language, audioTask.Track)
 
 		track := fmt.Sprintf("%d:", audioTask.Track)
 		eac3toParam := []string{srcPath, track, outputPath, "-log=NUL"}
 
 		eac3toPath := common.GetEac3toPath()
-		eac3toProcess := exec.Command(eac3toPath, eac3toParam...)
+		eac3toProcess := exec.CommandContext(ctx, eac3toPath, eac3toParam...)
 		err := eac3toProcess.Run()
 		if err != nil {
 			return "", err
@@ -154,14 +155,14 @@ func generateAudioCopyHandler(ext string) AudioCodecHandler {
 	}
 }
 
-func Demux(srcFile string, workDirPath string, demuxTask *common.DemuxTask) (string, error) {
+func Demux(ctx context.Context, srcFile string, workDirPath string, demuxTask *common.DemuxTask) (string, error) {
 	outputPath := common.GenerateNewFilePath(srcFile, workDirPath, demuxTask.Format, demuxTask.Language, demuxTask.Track)
 
 	track := fmt.Sprintf("%d:", demuxTask.Track)
 	eac3toParam := []string{srcFile, track, outputPath, "-log=NUL"}
 
 	eac3toPath := common.GetEac3toPath()
-	eac3toProcess := exec.Command(eac3toPath, eac3toParam...)
+	eac3toProcess := exec.CommandContext(ctx, eac3toPath, eac3toParam...)
 	err := eac3toProcess.Start()
 	if err != nil {
 		return "", err

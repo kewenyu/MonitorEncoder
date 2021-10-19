@@ -26,6 +26,7 @@ import (
 	"MonitorEncoder/core/worker/video"
 	"MonitorEncoder/web"
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -45,15 +46,16 @@ func main() {
 	)
 	flag.Parse()
 
-	stop := make(chan int)
 	var wg sync.WaitGroup
+	mainCtx, mainCtxCancelFunc := context.WithCancel(context.Background())
+	defer mainCtxCancelFunc()
 
-	monitorWorker, err := monitor.NewMonitor(stop, &wg, *monitorDirPath, *workDirPath, 0)
+	monitorWorker, err := monitor.NewMonitor(&wg, *monitorDirPath, *workDirPath, 0)
 	if err != nil {
 		log.Printf("[fatal] failed to create monitor worker: %s\n", err.Error())
 		return
 	}
-	err = monitorWorker.Start()
+	err = monitorWorker.Start(mainCtx)
 	if err != nil {
 		fmt.Printf("[fatal] failed to start monitor worker: %s\n", err.Error())
 		return
@@ -61,13 +63,13 @@ func main() {
 
 	videoWorkerList := make([]*video.Worker, 0)
 	for i := 0; i < *workerNum; i++ {
-		videoWorker, err := video.NewVideoWorker(stop, &wg, *workDirPath, monitorWorker.GetOutputStream(), uint(i))
+		videoWorker, err := video.NewVideoWorker(&wg, *workDirPath, monitorWorker.GetOutputStream(), uint(i))
 		if err != nil {
 			fmt.Printf("[fatal] failed to create video worker #%d: %s\n", i, err.Error())
 			return
 		}
 
-		err = videoWorker.Start()
+		err = videoWorker.Start(mainCtx)
 		if err != nil {
 			fmt.Printf("[fatal] failed to start video worker #%d: %s\n", i, err.Error())
 			return
@@ -78,25 +80,25 @@ func main() {
 
 	fanInVideoWorkerOutputStream := make(chan common.Task)
 	for _, videoWorker := range videoWorkerList {
-		go func(inputChan chan common.Task) {
+		go func(ctx context.Context, inputChan chan common.Task) {
 			for {
 				select {
-				case <-stop:
+				case <-ctx.Done():
 					return
 				case task := <-inputChan:
 					fanInVideoWorkerOutputStream <- task
 					continue
 				}
 			}
-		}(videoWorker.GetOutputStream())
+		}(mainCtx, videoWorker.GetOutputStream())
 	}
 
-	miscWorker, err := misc.NewMiscWorker(stop, &wg, *workDirPath, *outputDirPath, fanInVideoWorkerOutputStream, 0)
+	miscWorker, err := misc.NewMiscWorker(&wg, *workDirPath, *outputDirPath, fanInVideoWorkerOutputStream, 0)
 	if err != nil {
 		log.Printf("[fatal] failed to create misc worker: %s\n", err.Error())
 		return
 	}
-	err = miscWorker.Start()
+	err = miscWorker.Start(mainCtx)
 	if err != nil {
 		fmt.Printf("[fatal] failed to start misc worker: %s\n", err.Error())
 		return
@@ -112,7 +114,7 @@ func main() {
 	go func() {
 		for {
 			select {
-			case <-stop:
+			case <-mainCtx.Done():
 				return
 			default:
 			}
@@ -136,6 +138,7 @@ mainLoop:
 				continue
 			} else if userInput == "stop" {
 				log.Println("[info] user stop")
+				mainCtxCancelFunc()
 				break mainLoop
 			} else {
 				fmt.Printf("unknown command: %s\n", userInput)
@@ -144,7 +147,6 @@ mainLoop:
 		}
 	}
 
-	close(stop)
 	wg.Wait()
 
 	log.Println("[info] all finish")

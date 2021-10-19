@@ -22,6 +22,7 @@ import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -31,14 +32,14 @@ import (
 	"strings"
 )
 
-type CodecHandler func(<-chan int, string, string, *common.Task) (string, error)
+type CodecHandler func(context.Context, string, string, *common.Task) (string, error)
 
 var CodecHandlerMap = map[string]CodecHandler{
 	"hevc": handlerHEVC,
 	"avc":  handlerAVC,
 }
 
-func handlerHEVC(stop <-chan int, scriptPath string, workDirPath string, task *common.Task) (string, error) {
+func handlerHEVC(ctx context.Context, scriptPath string, workDirPath string, task *common.Task) (string, error) {
 	hevcFilePath := common.GenerateNewFilePath(task.Src, workDirPath, "hevc", "", 0)
 
 	baseX265Param := []string{"-D", "10", "--y4m", "--output", hevcFilePath, "-"}
@@ -46,10 +47,10 @@ func handlerHEVC(stop <-chan int, scriptPath string, workDirPath string, task *c
 	x265Param := append(baseX265Param, extraX265Param...)
 
 	vspipePath := common.GetVspipePath()
-	vspipeProcess := exec.Command(vspipePath, "-y", scriptPath, "-")
+	vspipeProcess := exec.CommandContext(ctx, vspipePath, "-y", scriptPath, "-")
 
 	x265Path := common.GetX265Path()
-	x265Process := exec.Command(x265Path, x265Param...)
+	x265Process := exec.CommandContext(ctx, x265Path, x265Param...)
 	x265Process.Stdin, _ = vspipeProcess.StdoutPipe()
 	x265StdErr, _ := x265Process.StderrPipe()
 
@@ -70,13 +71,11 @@ func handlerHEVC(stop <-chan int, scriptPath string, workDirPath string, task *c
 	x265FinishRegexp := regexp.MustCompile(`encoded \d+ frames`)
 	for {
 		if exitFlag == true {
-			_ = x265Process.Process.Kill()
-			_ = vspipeProcess.Process.Kill()
 			break
 		}
 
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			exitFlag = true
 			continue
 		default:
@@ -109,7 +108,7 @@ func handlerHEVC(stop <-chan int, scriptPath string, workDirPath string, task *c
 	return hevcFilePath, nil
 }
 
-func handlerAVC(stop <-chan int, scriptPath string, workDirPath string, task *common.Task) (string, error) {
+func handlerAVC(ctx context.Context, scriptPath string, workDirPath string, task *common.Task) (string, error) {
 	avcFilePath := common.GenerateNewFilePath(task.Src, workDirPath, "264", "", 0)
 
 	baseX264Param := []string{"--demuxer", "y4m", "--output", avcFilePath, "-"}
@@ -117,10 +116,10 @@ func handlerAVC(stop <-chan int, scriptPath string, workDirPath string, task *co
 	x264Param := append(baseX264Param, extraX264Param...)
 
 	vspipePath := common.GetVspipePath()
-	vspipeProcess := exec.Command(vspipePath, "-y", scriptPath, "-")
+	vspipeProcess := exec.CommandContext(ctx, vspipePath, "-y", scriptPath, "-")
 
 	x264Path := common.GetX264Path()
-	x264Process := exec.Command(x264Path, x264Param...)
+	x264Process := exec.CommandContext(ctx, x264Path, x264Param...)
 	x264Process.Stdin, _ = vspipeProcess.StdoutPipe()
 	x264StdErr, _ := x264Process.StderrPipe()
 
@@ -141,13 +140,11 @@ func handlerAVC(stop <-chan int, scriptPath string, workDirPath string, task *co
 	x264FinishRegexp := regexp.MustCompile(`encoded \d+ frames`)
 	for {
 		if exitFlag == true {
-			_ = x264Process.Process.Kill()
-			_ = vspipeProcess.Process.Kill()
 			break
 		}
 
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			exitFlag = true
 			continue
 		default:

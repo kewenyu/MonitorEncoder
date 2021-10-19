@@ -19,14 +19,15 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-func MoveFile(srcPath string, dstPath string) error {
-	err := exec.Command("cmd", "/C", "move", srcPath, dstPath).Run()
+func MoveFile(ctx context.Context, srcPath string, dstPath string) error {
+	err := exec.CommandContext(ctx, "cmd", "/C", "move", srcPath, dstPath).Run()
 	if err != nil {
 		return err
 	}

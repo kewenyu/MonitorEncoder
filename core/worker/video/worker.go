@@ -21,6 +21,7 @@ package video
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -34,7 +35,6 @@ import (
 
 type Worker struct {
 	id           uint
-	stop         <-chan int
 	wg           *sync.WaitGroup
 	workDirPath  string
 	inputStream  <-chan common.Task
@@ -42,14 +42,13 @@ type Worker struct {
 	isRunning    bool
 }
 
-func NewVideoWorker(stop <-chan int, wg *sync.WaitGroup, workDirPath string, inputStream <-chan common.Task, id uint) (*Worker, error) {
+func NewVideoWorker(wg *sync.WaitGroup, workDirPath string, inputStream <-chan common.Task, id uint) (*Worker, error) {
 	if _, err := os.Stat(workDirPath); os.IsNotExist(err) {
 		return nil, errors.New("work dir path not exist")
 	}
 
 	w := Worker{
 		id:           id,
-		stop:         stop,
 		wg:           wg,
 		workDirPath:  workDirPath,
 		inputStream:  inputStream,
@@ -60,14 +59,14 @@ func NewVideoWorker(stop <-chan int, wg *sync.WaitGroup, workDirPath string, inp
 	return &w, nil
 }
 
-func (w *Worker) Start() error {
+func (w *Worker) Start(ctx context.Context) error {
 	if w.isRunning == true {
 		return errors.New("video worker already running")
 	}
 
 	w.isRunning = true
 	w.wg.Add(1)
-	go w.workerLoop()
+	go w.workerLoop(ctx)
 	log.Printf("[info] video worker #%d started\n", w.id)
 
 	return nil
@@ -77,7 +76,7 @@ func (w *Worker) GetOutputStream() chan common.Task {
 	return w.outputStream
 }
 
-func (w *Worker) workerLoop() {
+func (w *Worker) workerLoop(ctx context.Context) {
 	defer func() {
 		w.isRunning = false
 		w.wg.Done()
@@ -92,12 +91,12 @@ func (w *Worker) workerLoop() {
 		}
 
 		select {
-		case <-w.stop:
+		case <-ctx.Done():
 			exitFlag = true
 			continue
 		case task := <-w.inputStream:
 			log.Printf("[info] video worker #%d handle task: %s\n", w.id, task.Src)
-			err := w.handleNewTask(&task)
+			err := w.handleNewTask(ctx, &task)
 			if err != nil {
 				log.Printf("[error] video worker #%d encounter error during handle task %s: %s", w.id, task.Src, err.Error())
 				continue
@@ -105,7 +104,7 @@ func (w *Worker) workerLoop() {
 			log.Printf("[info] video worker #%d finish task: %s\n", w.id, task.Src)
 
 			select {
-			case <-w.stop:
+			case <-ctx.Done():
 				exitFlag = true
 				continue
 			case w.outputStream <- task:
@@ -116,7 +115,7 @@ func (w *Worker) workerLoop() {
 	}
 }
 
-func (w *Worker) handleNewTask(task *common.Task) error {
+func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 	srcFile := task.Src
 	if _, err := os.Stat(srcFile); os.IsNotExist(err) {
 		errDesc := fmt.Sprintf("src file not exist: %s", srcFile)
@@ -146,14 +145,14 @@ func (w *Worker) handleNewTask(task *common.Task) error {
 	status.SetStatusCode(srcFile, status.VIDEO)
 	status.SetStatusDesc(srcFile, "indexing")
 
-	err = indexTask(scriptPath, task)
+	err = indexTask(ctx, scriptPath, task)
 	if err != nil {
 		status.SetStatusCode(srcFile, status.ERROR)
-		status.SetStatusDesc(srcFile, "indexing failed: " + err.Error())
+		status.SetStatusDesc(srcFile, "indexing failed: "+err.Error())
 		return err
 	}
 
-	resultPath, err := codecHandler(w.stop, scriptPath, w.workDirPath, task)
+	resultPath, err := codecHandler(ctx, scriptPath, w.workDirPath, task)
 	if err != nil {
 		status.SetStatusCode(srcFile, status.ERROR)
 		status.SetStatusDesc(srcFile, err.Error())
@@ -165,9 +164,9 @@ func (w *Worker) handleNewTask(task *common.Task) error {
 	return nil
 }
 
-func indexTask(scriptPath string, task *common.Task) error {
+func indexTask(ctx context.Context, scriptPath string, task *common.Task) error {
 	vspipePath := common.GetVspipePath()
-	vspipeProcess := exec.Command(vspipePath, "-i", scriptPath, "-")
+	vspipeProcess := exec.CommandContext(ctx, vspipePath, "-i", scriptPath, "-")
 	data, err := vspipeProcess.Output()
 	if err != nil {
 		return err

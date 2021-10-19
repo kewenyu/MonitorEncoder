@@ -21,6 +21,7 @@ package misc
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -31,7 +32,6 @@ import (
 
 type Worker struct {
 	id            uint
-	stop          <-chan int
 	wg            *sync.WaitGroup
 	workDirPath   string
 	outputDirPath string
@@ -39,7 +39,7 @@ type Worker struct {
 	isRunning     bool
 }
 
-func NewMiscWorker(stop <-chan int, wg *sync.WaitGroup, workDirPath string, outputDirPath string, inputStream <-chan common.Task, id uint) (*Worker, error) {
+func NewMiscWorker(wg *sync.WaitGroup, workDirPath string, outputDirPath string, inputStream <-chan common.Task, id uint) (*Worker, error) {
 	if _, err := os.Stat(workDirPath); os.IsNotExist(err) {
 		return nil, errors.New("work dir path not exist")
 	}
@@ -50,7 +50,6 @@ func NewMiscWorker(stop <-chan int, wg *sync.WaitGroup, workDirPath string, outp
 
 	w := Worker{
 		id:            id,
-		stop:          stop,
 		wg:            wg,
 		workDirPath:   workDirPath,
 		outputDirPath: outputDirPath,
@@ -61,20 +60,20 @@ func NewMiscWorker(stop <-chan int, wg *sync.WaitGroup, workDirPath string, outp
 	return &w, nil
 }
 
-func (w *Worker) Start() error {
+func (w *Worker) Start(ctx context.Context) error {
 	if w.isRunning == true {
 		return errors.New("misc worker already running")
 	}
 
 	w.isRunning = true
 	w.wg.Add(1)
-	go w.workerLoop()
+	go w.workerLoop(ctx)
 	log.Printf("[info] misc worker #%d started\n", w.id)
 
 	return nil
 }
 
-func (w *Worker) workerLoop() {
+func (w *Worker) workerLoop(ctx context.Context) {
 	defer func() {
 		w.isRunning = false
 		w.wg.Done()
@@ -89,12 +88,12 @@ func (w *Worker) workerLoop() {
 		}
 
 		select {
-		case <-w.stop:
+		case <-ctx.Done():
 			exitFlag = true
 			continue
 		case task := <-w.inputStream:
 			log.Printf("[info] misc worker #%d handle task: %s\n", w.id, task.Src)
-			err := w.handleNewTask(&task)
+			err := w.handleNewTask(ctx, &task)
 			if err != nil {
 				log.Printf("[error] misc worker #%d encounter error during handle task %s: %s\n", w.id, task.Src, err.Error())
 				continue
@@ -106,7 +105,7 @@ func (w *Worker) workerLoop() {
 	}
 }
 
-func (w *Worker) handleNewTask(task *common.Task) error {
+func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 	srcFile := task.Src
 	if _, err := os.Stat(srcFile); os.IsNotExist(err) {
 		errDesc := fmt.Sprintf("src file not exist: %s", srcFile)
@@ -129,7 +128,7 @@ func (w *Worker) handleNewTask(task *common.Task) error {
 
 		status.SetStatusDesc(srcFile, fmt.Sprintf("encoding audio track #%d to %s", audioTask.Track, audioTask.Codec))
 
-		audioPath, err := codecHandler(srcFile, w.workDirPath, &audioTask)
+		audioPath, err := codecHandler(ctx, srcFile, w.workDirPath, &audioTask)
 		if err != nil {
 			status.SetStatusCode(srcFile, status.ERROR)
 			status.SetStatusDesc(srcFile, err.Error())
@@ -146,7 +145,7 @@ func (w *Worker) handleNewTask(task *common.Task) error {
 	for _, demuxTask := range task.Demux {
 		status.SetStatusDesc(srcFile, fmt.Sprintf("demuxing track #%d, format %s", demuxTask.Track, demuxTask.Format))
 
-		outputPath, err := Demux(srcFile, w.workDirPath, &demuxTask)
+		outputPath, err := Demux(ctx, srcFile, w.workDirPath, &demuxTask)
 		if err != nil {
 			status.SetStatusCode(srcFile, status.ERROR)
 			status.SetStatusDesc(srcFile, err.Error())
@@ -164,7 +163,7 @@ func (w *Worker) handleNewTask(task *common.Task) error {
 	moveFileList = append(moveFileList, task.TaskFile)
 	moveFileList = append(moveFileList, task.ScriptFile)
 	for _, outputPath := range moveFileList {
-		err := common.MoveFile(outputPath, w.outputDirPath)
+		err := common.MoveFile(ctx, outputPath, w.outputDirPath)
 		if err != nil {
 			status.SetStatusCode(srcFile, status.ERROR)
 			status.SetStatusDesc(srcFile, err.Error())

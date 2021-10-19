@@ -21,6 +21,7 @@ package monitor
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"context"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -32,7 +33,6 @@ import (
 
 type Worker struct {
 	id           uint
-	stop         <-chan int
 	wg           *sync.WaitGroup
 	monitorPath  string
 	recyclePath  string
@@ -41,7 +41,7 @@ type Worker struct {
 	isRunning    bool
 }
 
-func NewMonitor(stop <-chan int, wg *sync.WaitGroup, monitorPath string, workDirPath string, id uint) (*Worker, error) {
+func NewMonitor(wg *sync.WaitGroup, monitorPath string, workDirPath string, id uint) (*Worker, error) {
 	if _, err := os.Stat(monitorPath); os.IsNotExist(err) {
 		return nil, errors.New("monitor path not exist")
 	}
@@ -52,7 +52,6 @@ func NewMonitor(stop <-chan int, wg *sync.WaitGroup, monitorPath string, workDir
 
 	m := Worker{
 		id:           id,
-		stop:         stop,
 		wg:           wg,
 		monitorPath:  monitorPath,
 		recyclePath:  filepath.Join(monitorPath, "recycle"),
@@ -64,7 +63,7 @@ func NewMonitor(stop <-chan int, wg *sync.WaitGroup, monitorPath string, workDir
 	return &m, nil
 }
 
-func (w *Worker) Start() error {
+func (w *Worker) Start(ctx context.Context) error {
 	if w.isRunning == true {
 		return errors.New("monitor already running")
 	}
@@ -78,7 +77,7 @@ func (w *Worker) Start() error {
 
 	w.isRunning = true
 	w.wg.Add(1)
-	go w.workerLoop()
+	go w.workerLoop(ctx)
 	log.Printf("[info] monitor #%d started\n", w.id)
 
 	return nil
@@ -88,7 +87,7 @@ func (w *Worker) GetOutputStream() chan common.Task {
 	return w.outputStream
 }
 
-func (w *Worker) workerLoop() {
+func (w *Worker) workerLoop(ctx context.Context) {
 	defer func() {
 		w.isRunning = false
 		w.wg.Done()
@@ -103,19 +102,19 @@ func (w *Worker) workerLoop() {
 		}
 
 		select {
-		case <-w.stop:
+		case <-ctx.Done():
 			exitFlag = true
 			continue
 		default:
 		}
 
-		newTaskPath := w.checkNewTask()
+		newTaskPath := w.checkNewTask(ctx)
 		if newTaskPath != "" {
 			newTask, err := common.NewTaskFromJson(newTaskPath)
 
 			if err != nil {
 				log.Printf("[error] monitor #%d failed to load task: %s: %s\n", w.id, newTaskPath, err.Error())
-				err = common.MoveFile(newTaskPath, w.recyclePath)
+				err = common.MoveFile(ctx, newTaskPath, w.recyclePath)
 				if err != nil {
 					log.Printf("[error] monitor #%d failed to move bad task to recycle bin: %s\n", w.id, err.Error())
 				}
@@ -129,7 +128,7 @@ func (w *Worker) workerLoop() {
 			status.SetStatusDesc(newTask.Src, "waiting")
 
 			select {
-			case <-w.stop:
+			case <-ctx.Done():
 				exitFlag = true
 				continue
 			case w.outputStream <- *newTask:
@@ -141,7 +140,7 @@ func (w *Worker) workerLoop() {
 	}
 }
 
-func (w *Worker) checkNewTask() string {
+func (w *Worker) checkNewTask(ctx context.Context) string {
 	fileInfoList, err := ioutil.ReadDir(w.monitorPath)
 	if err != nil {
 		return ""
@@ -154,7 +153,7 @@ func (w *Worker) checkNewTask() string {
 		if fileExt == ".json" {
 			srcPath := filepath.Join(w.monitorPath, fileName)
 			dstPath := w.workDirPath
-			err = common.MoveFile(srcPath, dstPath)
+			err = common.MoveFile(ctx, srcPath, dstPath)
 			if err == nil {
 				newTaskPath = filepath.Join(dstPath, fileName)
 				break
