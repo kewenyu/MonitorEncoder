@@ -172,14 +172,32 @@ func indexTask(ctx context.Context, scriptPath string, task *common.Task) error 
 		return err
 	}
 
-	infoRegExp := regexp.MustCompile(`Frames:\s*(\d+)`)
-	match := infoRegExp.FindStringSubmatch(string(data))
-	if len(match) == 2 {
-		totalFrameNum, err := strconv.ParseUint(match[1], 10, 32)
+	frameNumRegExp := regexp.MustCompile(`Frames:\s*(\d+)`)
+	frameNumMatch := frameNumRegExp.FindStringSubmatch(string(data))
+	if len(frameNumMatch) == 2 {
+		totalFrameNum, err := strconv.ParseUint(frameNumMatch[1], 10, 32)
 		if err != nil {
 			return err
 		} else {
 			task.TotalFrameNum = uint(totalFrameNum)
+		}
+	}
+
+	fpsRegExp := regexp.MustCompile(`FPS:\s*(\d+)/(\d+)`)
+	fpsMatch := fpsRegExp.FindStringSubmatch(string(data))
+	if len(fpsMatch) == 3 {
+		fpsNum, err := strconv.ParseUint(fpsMatch[1], 10, 32)
+		if err != nil {
+			return err
+		} else {
+			task.FPSNum = uint(fpsNum)
+		}
+
+		fpsDen, err := strconv.ParseUint(fpsMatch[2], 10, 32)
+		if err != nil {
+			return err
+		} else {
+			task.FPSDen = uint(fpsDen)
 		}
 	}
 

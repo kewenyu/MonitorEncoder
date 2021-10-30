@@ -35,6 +35,8 @@ type Task struct {
 	HardSub  string      `json:"hardsub"`
 
 	TotalFrameNum  uint
+	FPSNum         uint
+	FPSDen         uint
 	ScriptFile     string
 	TaskFile       string
 	resultPathList []string
