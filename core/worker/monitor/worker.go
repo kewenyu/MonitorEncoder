@@ -41,21 +41,21 @@ type Worker struct {
 	isRunning    bool
 }
 
-func NewMonitor(wg *sync.WaitGroup, monitorPath string, workDirPath string, id uint) (*Worker, error) {
-	if _, err := os.Stat(monitorPath); os.IsNotExist(err) {
+func NewMonitor(wg *sync.WaitGroup, param *common.Parameter, _ <-chan common.Task, id uint) (*Worker, error) {
+	if _, err := os.Stat(param.MonitorDirPath); os.IsNotExist(err) {
 		return nil, errors.New("monitor path not exist")
 	}
 
-	if _, err := os.Stat(workDirPath); os.IsNotExist(err) {
+	if _, err := os.Stat(param.WorkDirPath); os.IsNotExist(err) {
 		return nil, errors.New("work dir path not exist")
 	}
 
 	m := Worker{
 		id:           id,
 		wg:           wg,
-		monitorPath:  monitorPath,
-		recyclePath:  filepath.Join(monitorPath, "recycle"),
-		workDirPath:  workDirPath,
+		monitorPath:  param.MonitorDirPath,
+		recyclePath:  filepath.Join(param.MonitorDirPath, "recycle"),
+		workDirPath:  param.WorkDirPath,
 		outputStream: make(chan common.Task),
 		isRunning:    false,
 	}

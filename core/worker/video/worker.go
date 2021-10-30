@@ -42,15 +42,15 @@ type Worker struct {
 	isRunning    bool
 }
 
-func NewVideoWorker(wg *sync.WaitGroup, workDirPath string, inputStream <-chan common.Task, id uint) (*Worker, error) {
-	if _, err := os.Stat(workDirPath); os.IsNotExist(err) {
+func NewVideoWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-chan common.Task, id uint) (*Worker, error) {
+	if _, err := os.Stat(param.WorkDirPath); os.IsNotExist(err) {
 		return nil, errors.New("work dir path not exist")
 	}
 
 	w := Worker{
 		id:           id,
 		wg:           wg,
-		workDirPath:  workDirPath,
+		workDirPath:  param.WorkDirPath,
 		inputStream:  inputStream,
 		outputStream: make(chan common.Task),
 		isRunning:    false,

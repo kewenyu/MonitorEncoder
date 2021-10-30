@@ -38,14 +38,13 @@ import (
 )
 
 func main() {
-	var (
-		workerNum      = flag.Int("n", 1, "worker num")
-		monitorDirPath = flag.String("md", "monitor_dir", "monitor dir")
-		workDirPath    = flag.String("wd", "work_dir", "work dir")
-		outputDirPath  = flag.String("od", "output_dir", "output dir")
-		ip             = flag.String("ip", "127.0.0.1", "web interface's ip")
-		port           = flag.String("port", "8899", "web interface's port")
-	)
+	param := common.Parameter{}
+	flag.IntVar(&param.WorkerNum, "n", 1, "worker num")
+	flag.StringVar(&param.MonitorDirPath, "md", "monitor_dir", "monitor dir")
+	flag.StringVar(&param.WorkDirPath, "wd", "work_dir", "work dir")
+	flag.StringVar(&param.OutputDirPath, "od", "output_dir", "output dir")
+	flag.StringVar(&param.Ip, "ip", "127.0.0.1", "web interface's ip")
+	flag.StringVar(&param.Port, "port", "8899", "web interface's port")
 	flag.Parse()
 
 	err := common.CheckToolsAvailability()
@@ -58,7 +57,7 @@ func main() {
 	mainCtx, mainCtxCancelFunc := context.WithCancel(context.Background())
 	defer mainCtxCancelFunc()
 
-	monitorWorker, err := monitor.NewMonitor(&wg, *monitorDirPath, *workDirPath, 0)
+	monitorWorker, err := monitor.NewMonitor(&wg, &param, nil, 0)
 	if err != nil {
 		log.Printf("[fatal] failed to create monitor worker: %s\n", err.Error())
 		return
@@ -69,39 +68,18 @@ func main() {
 		return
 	}
 
-	videoWorkerList := make([]*video.Worker, 0)
-	for i := 0; i < *workerNum; i++ {
-		videoWorker, err := video.NewVideoWorker(&wg, *workDirPath, monitorWorker.GetOutputStream(), uint(i))
-		if err != nil {
-			fmt.Printf("[fatal] failed to create video worker #%d: %s\n", i, err.Error())
-			return
-		}
-
-		err = videoWorker.Start(mainCtx)
-		if err != nil {
-			fmt.Printf("[fatal] failed to start video worker #%d: %s\n", i, err.Error())
-			return
-		}
-
-		videoWorkerList = append(videoWorkerList, videoWorker)
+	multipleVideoWorker, err := video.NewMultiWorker(&wg, &param, monitorWorker.GetOutputStream(), 0)
+	if err != nil {
+		log.Printf("[fatal] failed to create multi video worker: %s\n", err.Error())
+		return
+	}
+	err = multipleVideoWorker.Start(mainCtx)
+	if err != nil {
+		log.Printf("[fatal] failed to start multi video worker: %s\n", err.Error())
+		return
 	}
 
-	fanInVideoWorkerOutputStream := make(chan common.Task)
-	for _, videoWorker := range videoWorkerList {
-		go func(ctx context.Context, inputChan chan common.Task) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case task := <-inputChan:
-					fanInVideoWorkerOutputStream <- task
-					continue
-				}
-			}
-		}(mainCtx, videoWorker.GetOutputStream())
-	}
-
-	miscWorker, err := misc.NewMiscWorker(&wg, *workDirPath, *outputDirPath, fanInVideoWorkerOutputStream, 0)
+	miscWorker, err := misc.NewMiscWorker(&wg, &param, multipleVideoWorker.GetOutputStream(), 0)
 	if err != nil {
 		log.Printf("[fatal] failed to create misc worker: %s\n", err.Error())
 		return
@@ -112,7 +90,7 @@ func main() {
 		return
 	}
 
-	err = web.StartWeb(*ip, *port, *monitorDirPath)
+	err = web.StartWeb(&param)
 	if err != nil {
 		fmt.Println(err.Error())
 		return

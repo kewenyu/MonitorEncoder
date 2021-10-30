@@ -36,23 +36,24 @@ type Worker struct {
 	workDirPath   string
 	outputDirPath string
 	inputStream   <-chan common.Task
+	outputStream  chan common.Task
 	isRunning     bool
 }
 
-func NewMiscWorker(wg *sync.WaitGroup, workDirPath string, outputDirPath string, inputStream <-chan common.Task, id uint) (*Worker, error) {
-	if _, err := os.Stat(workDirPath); os.IsNotExist(err) {
+func NewMiscWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-chan common.Task, id uint) (*Worker, error) {
+	if _, err := os.Stat(param.WorkDirPath); os.IsNotExist(err) {
 		return nil, errors.New("work dir path not exist")
 	}
 
-	if _, err := os.Stat(outputDirPath); os.IsNotExist(err) {
+	if _, err := os.Stat(param.OutputDirPath); os.IsNotExist(err) {
 		return nil, errors.New("output dir path not exist")
 	}
 
 	w := Worker{
 		id:            id,
 		wg:            wg,
-		workDirPath:   workDirPath,
-		outputDirPath: outputDirPath,
+		workDirPath:   param.WorkDirPath,
+		outputDirPath: param.OutputDirPath,
 		inputStream:   inputStream,
 		isRunning:     false,
 	}
@@ -103,6 +104,10 @@ func (w *Worker) workerLoop(ctx context.Context) {
 
 		runtime.Gosched()
 	}
+}
+
+func (w *Worker) GetOutputStream() chan common.Task {
+	return w.outputStream
 }
 
 func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {

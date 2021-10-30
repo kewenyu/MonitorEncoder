@@ -36,18 +36,18 @@ var (
 	monitorPath string
 )
 
-func StartWeb(ip string, port string, monitorDir string) error {
-	if _, err := os.Stat(monitorDir); os.IsNotExist(err) {
+func StartWeb(param *common.Parameter) error {
+	if _, err := os.Stat(param.MonitorDirPath); os.IsNotExist(err) {
 		return errors.New("monitor dir path not exist")
 	}
 
-	monitorPath = monitorDir
+	monitorPath = param.MonitorDirPath
 
 	if isRunning == true {
 		return errors.New("http interface already running")
 	}
 
-	addr = fmt.Sprintf("%s:%s", ip, port)
+	addr = fmt.Sprintf("%s:%s", param.Ip, param.Port)
 
 	go func() {
 		defer func() {
@@ -66,7 +66,7 @@ func StartWeb(ip string, port string, monitorDir string) error {
 	}()
 
 	isRunning = true
-	log.Printf("[info] http interface listening at %s:%s\n", ip, port)
+	log.Printf("[info] http interface listening at %s\n", addr)
 
 	return nil
 }
