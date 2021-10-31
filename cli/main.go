@@ -21,6 +21,7 @@ package main
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"MonitorEncoder/core/worker"
 	"MonitorEncoder/core/worker/final"
 	"MonitorEncoder/core/worker/misc"
 	"MonitorEncoder/core/worker/monitor"
@@ -56,62 +57,30 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
+	workerSequence := []worker.Worker{
+		monitor.NewMonitor(&wg, &param, 0),
+		video.NewMultiWorker(&wg, &param, 0),
+		misc.NewMiscWorker(&wg, &param, 0),
+		mux.NewMuxWorker(&wg, &param, 0),
+		final.NewFinalWorker(&wg, &param, 0),
+	}
+
+	var upperStream chan common.Task
+	for _, w := range workerSequence {
+		w.SetInputStream(upperStream)
+		upperStream = w.GetOutputStream()
+	}
+
 	mainCtx, mainCtxCancelFunc := context.WithCancel(context.Background())
 	defer mainCtxCancelFunc()
 
-	monitorWorker, err := monitor.NewMonitor(&wg, &param, nil, 0)
-	if err != nil {
-		log.Printf("[fatal] failed to create monitor worker: %s\n", err.Error())
-		return
-	}
-	err = monitorWorker.Start(mainCtx)
-	if err != nil {
-		fmt.Printf("[fatal] failed to start monitor worker: %s\n", err.Error())
-		return
-	}
-
-	multipleVideoWorker, err := video.NewMultiWorker(&wg, &param, monitorWorker.GetOutputStream(), 0)
-	if err != nil {
-		log.Printf("[fatal] failed to create multi video worker: %s\n", err.Error())
-		return
-	}
-	err = multipleVideoWorker.Start(mainCtx)
-	if err != nil {
-		log.Printf("[fatal] failed to start multi video worker: %s\n", err.Error())
-		return
-	}
-
-	miscWorker, err := misc.NewMiscWorker(&wg, &param, multipleVideoWorker.GetOutputStream(), 0)
-	if err != nil {
-		log.Printf("[fatal] failed to create misc worker: %s\n", err.Error())
-		return
-	}
-	err = miscWorker.Start(mainCtx)
-	if err != nil {
-		fmt.Printf("[fatal] failed to start misc worker: %s\n", err.Error())
-		return
-	}
-
-	muxWorker, err := mux.NewMuxWorker(&wg, &param, miscWorker.GetOutputStream(), 0)
-	if err != nil {
-		log.Printf("[fatal] failed to create mux worker: %s\n", err.Error())
-		return
-	}
-	err = muxWorker.Start(mainCtx)
-	if err != nil {
-		fmt.Printf("[fatal] failed to start mux worker: %s\n", err.Error())
-		return
-	}
-
-	finalWorker, err := final.NewFinalWorker(&wg, &param, muxWorker.GetOutputStream(), 0)
-	if err != nil {
-		log.Printf("[fatal] failed to create final worker: %s\n", err.Error())
-		return
-	}
-	err = finalWorker.Start(mainCtx)
-	if err != nil {
-		fmt.Printf("[fatal] failed to start final worker: %s\n", err.Error())
-		return
+	var startErr error
+	for _, w := range workerSequence {
+		startErr = w.Start(mainCtx)
+		if startErr != nil {
+			log.Printf("[fatal] failed to start %s: %s\n", w.GetPrettyName(), err.Error())
+			return
+		}
 	}
 
 	err = web.StartWeb(&param)

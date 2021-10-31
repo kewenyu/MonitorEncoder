@@ -32,11 +32,7 @@ type MultiWorker struct {
 	isRunning    bool
 }
 
-func NewMultiWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-chan common.Task, id uint) (*MultiWorker, error) {
-	if param.WorkerNum <= 0 {
-		return nil, errors.New(fmt.Sprintf("invalid worker num: %d", param.WorkerNum))
-	}
-
+func NewMultiWorker(wg *sync.WaitGroup, param *common.Parameter, id uint) *MultiWorker {
 	mw := MultiWorker{
 		workerList:   make([]*Worker, 0),
 		outputStream: make(chan common.Task),
@@ -44,19 +40,20 @@ func NewMultiWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-c
 	}
 
 	for i := 0; i < param.WorkerNum; i++ {
-		worker, err := NewVideoWorker(wg, param, inputStream, id + uint(i))
-		if err != nil {
-			return nil, err
-		}
+		worker := NewVideoWorker(wg, param, id + uint(i))
 		mw.workerList = append(mw.workerList, worker)
 	}
 
-	return &mw, nil
+	return &mw
 }
 
 func (mw *MultiWorker) Start(ctx context.Context) error {
 	if mw.isRunning == true {
 		return errors.New("video worker already running")
+	}
+
+	if len(mw.workerList) <= 0 {
+		return errors.New("worker list is empty")
 	}
 
 	for _, worker := range mw.workerList {
@@ -85,6 +82,16 @@ func (mw *MultiWorker) Start(ctx context.Context) error {
 	return nil
 }
 
+func (mw *MultiWorker) SetInputStream(inputStream <-chan common.Task) {
+	for _, worker := range mw.workerList {
+		worker.SetInputStream(inputStream)
+	}
+}
+
 func (mw *MultiWorker) GetOutputStream() chan common.Task {
 	return mw.outputStream
+}
+
+func (mw *MultiWorker) GetPrettyName() string {
+	return fmt.Sprintf("multi video worker wrapper")
 }

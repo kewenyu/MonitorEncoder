@@ -21,8 +21,10 @@ package final
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"MonitorEncoder/core/worker"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -30,65 +32,61 @@ import (
 )
 
 type Worker struct {
-	id            uint
-	wg            *sync.WaitGroup
+	*worker.Base
 	workDirPath   string
 	outputDirPath string
-	inputStream   <-chan common.Task
-	outputStream  chan common.Task
-	isRunning     bool
 }
 
-func NewFinalWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-chan common.Task, id uint) (*Worker, error) {
-	if _, err := os.Stat(param.WorkDirPath); os.IsNotExist(err) {
-		return nil, errors.New("work dir path not exist")
-	}
-
-	if _, err := os.Stat(param.OutputDirPath); os.IsNotExist(err) {
-		return nil, errors.New("output dir path not exist")
-	}
-
+func NewFinalWorker(wg *sync.WaitGroup, param *common.Parameter, id uint) *Worker {
 	w := Worker{
-		id:            id,
-		wg:            wg,
+		Base:          worker.NewWorkerBase(wg, id),
 		workDirPath:   param.WorkDirPath,
 		outputDirPath: param.OutputDirPath,
-		inputStream:   inputStream,
-		outputStream:  make(chan common.Task),
-		isRunning:     false,
 	}
 
-	return &w, nil
+	return &w
 }
 
 func (w *Worker) Start(ctx context.Context) error {
-	if w.isRunning == true {
+	if w.IsRunning == true {
 		return errors.New("final worker already running")
 	}
 
-	w.isRunning = true
-	w.wg.Add(1)
+	if _, err := os.Stat(w.workDirPath); os.IsNotExist(err) {
+		return errors.New("work dir path not exist")
+	}
+
+	if _, err := os.Stat(w.outputDirPath); os.IsNotExist(err) {
+		return errors.New("output dir path not exist")
+	}
+
+	if w.InputStream == nil {
+		return errors.New("input stream not set")
+	}
+
+	w.IsRunning = true
+	w.Wg.Add(1)
 	go w.workerLoop(ctx)
-	log.Printf("[info] final worker #%d started\n", w.id)
+	log.Printf("[info] %s started\n", w.GetPrettyName())
 
 	return nil
 }
 
-func (w *Worker) GetOutputStream() chan common.Task {
-	return w.outputStream
+func (w *Worker) GetPrettyName() string {
+	return fmt.Sprintf("final worker #%d", w.Id)
 }
 
 func (w *Worker) workerLoop(ctx context.Context) {
 	defer func() {
-		w.isRunning = false
-		w.wg.Done()
-		log.Printf("[info] final worker #%d exited\n", w.id)
+		w.IsRunning = false
+		w.Wg.Done()
+		log.Printf("[info] %s exited\n", w.GetPrettyName())
 	}()
 
 	exitFlag := false
 	for {
 		if exitFlag == true {
-			log.Printf("[info] final worker #%d receive exit signal\n", w.id)
+			log.Printf("[info] %s receive exit signal\n", w.GetPrettyName())
 			break
 		}
 
@@ -96,14 +94,14 @@ func (w *Worker) workerLoop(ctx context.Context) {
 		case <-ctx.Done():
 			exitFlag = true
 			continue
-		case task := <-w.inputStream:
-			log.Printf("[info] final worker #%d handle task: %s\n", w.id, task.Src)
+		case task := <-w.InputStream:
+			log.Printf("[info] %s handle task: %s\n", w.GetPrettyName(), task.Src)
 			err := w.handleNewTask(ctx, &task)
 			if err != nil {
-				log.Printf("[error] final worker #%d encounter error during handle task %s: %s\n", w.id, task.Src, err.Error())
+				log.Printf("[error] %s encounter error during handle task %s: %s\n", w.GetPrettyName(), task.Src, err.Error())
 				continue
 			}
-			log.Printf("[info] final worker #%d finish task: %s\n", w.id, task.Src)
+			log.Printf("[info] %s finish task: %s\n", w.GetPrettyName(), task.Src)
 		}
 
 		runtime.Gosched()
@@ -118,14 +116,14 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 	err := common.MoveFile(ctx, task.ScriptFile, w.outputDirPath)
 	if err != nil {
 		status.SetStatusCode(srcFile, status.ERROR)
-		status.SetStatusDesc(srcFile, "failed to move " + task.ScriptFile)
+		status.SetStatusDesc(srcFile, "failed to move "+task.ScriptFile)
 		return err
 	}
 
 	err = common.MoveFile(ctx, task.TaskFile, w.outputDirPath)
 	if err != nil {
 		status.SetStatusCode(srcFile, status.ERROR)
-		status.SetStatusDesc(srcFile, "failed to move " + task.TaskFile)
+		status.SetStatusDesc(srcFile, "failed to move "+task.TaskFile)
 		return err
 	}
 
@@ -136,7 +134,7 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 			err = common.DeleteFile(ctx, result.Path)
 			if err != nil {
 				status.SetStatusCode(srcFile, status.ERROR)
-				status.SetStatusDesc(srcFile, "failed to delete " + result.Path)
+				status.SetStatusDesc(srcFile, "failed to delete "+result.Path)
 				return err
 			}
 		}
@@ -144,7 +142,7 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 		err = common.MoveFile(ctx, task.MuxedFile, w.outputDirPath)
 		if err != nil {
 			status.SetStatusCode(srcFile, status.ERROR)
-			status.SetStatusDesc(srcFile, "failed to move " + task.MuxedFile)
+			status.SetStatusDesc(srcFile, "failed to move "+task.MuxedFile)
 			return err
 		}
 	} else {
@@ -152,7 +150,7 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 			err = common.MoveFile(ctx, result.Path, w.outputDirPath)
 			if err != nil {
 				status.SetStatusCode(srcFile, status.ERROR)
-				status.SetStatusDesc(srcFile, "failed to move " + result.Path)
+				status.SetStatusDesc(srcFile, "failed to move "+result.Path)
 				return err
 			}
 		}

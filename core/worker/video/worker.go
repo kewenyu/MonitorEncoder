@@ -21,6 +21,7 @@ package video
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"MonitorEncoder/core/worker"
 	"context"
 	"errors"
 	"fmt"
@@ -34,59 +35,55 @@ import (
 )
 
 type Worker struct {
-	id           uint
-	wg           *sync.WaitGroup
+	*worker.Base
 	workDirPath  string
-	inputStream  <-chan common.Task
-	outputStream chan common.Task
-	isRunning    bool
 }
 
-func NewVideoWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-chan common.Task, id uint) (*Worker, error) {
-	if _, err := os.Stat(param.WorkDirPath); os.IsNotExist(err) {
-		return nil, errors.New("work dir path not exist")
-	}
-
+func NewVideoWorker(wg *sync.WaitGroup, param *common.Parameter, id uint) *Worker {
 	w := Worker{
-		id:           id,
-		wg:           wg,
-		workDirPath:  param.WorkDirPath,
-		inputStream:  inputStream,
-		outputStream: make(chan common.Task),
-		isRunning:    false,
+		Base:        worker.NewWorkerBase(wg, id),
+		workDirPath: param.WorkDirPath,
 	}
 
-	return &w, nil
+	return &w
 }
 
 func (w *Worker) Start(ctx context.Context) error {
-	if w.isRunning == true {
+	if w.IsRunning == true {
 		return errors.New("video worker already running")
 	}
 
-	w.isRunning = true
-	w.wg.Add(1)
+	if _, err := os.Stat(w.workDirPath); os.IsNotExist(err) {
+		return errors.New("work dir path not exist")
+	}
+
+	if w.InputStream == nil {
+		return errors.New("input stream not set")
+	}
+
+	w.IsRunning = true
+	w.Wg.Add(1)
 	go w.workerLoop(ctx)
-	log.Printf("[info] video worker #%d started\n", w.id)
+	log.Printf("[info] %s started\n", w.GetPrettyName())
 
 	return nil
 }
 
-func (w *Worker) GetOutputStream() chan common.Task {
-	return w.outputStream
+func (w *Worker) GetPrettyName() string {
+	return fmt.Sprintf("video worker #%d", w.Id)
 }
 
 func (w *Worker) workerLoop(ctx context.Context) {
 	defer func() {
-		w.isRunning = false
-		w.wg.Done()
-		log.Printf("[info] video worker #%d exited\n", w.id)
+		w.IsRunning = false
+		w.Wg.Done()
+		log.Printf("[info] %s exited\n", w.GetPrettyName())
 	}()
 
 	exitFlag := false
 	for {
 		if exitFlag == true {
-			log.Printf("[info] video worker #%d receive exit signal\n", w.id)
+			log.Printf("[info] %s receive exit signal\n", w.GetPrettyName())
 			break
 		}
 
@@ -94,20 +91,20 @@ func (w *Worker) workerLoop(ctx context.Context) {
 		case <-ctx.Done():
 			exitFlag = true
 			continue
-		case task := <-w.inputStream:
-			log.Printf("[info] video worker #%d handle task: %s\n", w.id, task.Src)
+		case task := <-w.InputStream:
+			log.Printf("[info] %s handle task: %s\n", w.GetPrettyName(), task.Src)
 			err := w.handleNewTask(ctx, &task)
 			if err != nil {
-				log.Printf("[error] video worker #%d encounter error during handle task %s: %s", w.id, task.Src, err.Error())
+				log.Printf("[error] %s encounter error during handle task %s: %s", w.GetPrettyName(), task.Src, err.Error())
 				continue
 			}
-			log.Printf("[info] video worker #%d finish task: %s\n", w.id, task.Src)
+			log.Printf("[info] %s finish task: %s\n", w.GetPrettyName(), task.Src)
 
 			select {
 			case <-ctx.Done():
 				exitFlag = true
 				continue
-			case w.outputStream <- task:
+			case w.OutputStream <- task:
 			}
 		}
 

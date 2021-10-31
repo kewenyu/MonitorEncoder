@@ -27,6 +27,33 @@ import (
 type Worker interface {
 	Start(ctx context.Context) error
 	GetOutputStream() chan common.Task
+	SetInputStream(inputStream <-chan common.Task)
+	GetPrettyName() string
 }
 
-type Constructor func(wg *sync.WaitGroup, param *common.Parameter, inputStream <-chan common.Task, id uint) (Worker, error)
+type Base struct {
+	Id uint
+	Wg *sync.WaitGroup
+	InputStream  <-chan common.Task
+	OutputStream chan common.Task
+	IsRunning    bool
+}
+
+func NewWorkerBase(wg *sync.WaitGroup, id uint) *Base {
+	b := Base{
+		Id:           id,
+		Wg:           wg,
+		InputStream:  nil,
+		OutputStream: make(chan common.Task),
+		IsRunning:    false,
+	}
+	return &b
+}
+
+func (b *Base) GetOutputStream() chan common.Task {
+	return b.OutputStream
+}
+
+func (b *Base) SetInputStream(inputStream <-chan common.Task) {
+	b.InputStream = inputStream
+}

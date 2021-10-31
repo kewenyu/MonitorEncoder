@@ -21,8 +21,10 @@ package monitor
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"MonitorEncoder/core/worker"
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -32,40 +34,34 @@ import (
 )
 
 type Worker struct {
-	id           uint
-	wg           *sync.WaitGroup
-	monitorPath  string
-	recyclePath  string
-	workDirPath  string
-	outputStream chan common.Task
-	isRunning    bool
+	*worker.Base
+	monitorPath string
+	recyclePath string
+	workDirPath string
 }
 
-func NewMonitor(wg *sync.WaitGroup, param *common.Parameter, _ <-chan common.Task, id uint) (*Worker, error) {
-	if _, err := os.Stat(param.MonitorDirPath); os.IsNotExist(err) {
-		return nil, errors.New("monitor path not exist")
-	}
-
-	if _, err := os.Stat(param.WorkDirPath); os.IsNotExist(err) {
-		return nil, errors.New("work dir path not exist")
-	}
-
+func NewMonitor(wg *sync.WaitGroup, param *common.Parameter, id uint) *Worker {
 	m := Worker{
-		id:           id,
-		wg:           wg,
-		monitorPath:  param.MonitorDirPath,
-		recyclePath:  filepath.Join(param.MonitorDirPath, "recycle"),
-		workDirPath:  param.WorkDirPath,
-		outputStream: make(chan common.Task),
-		isRunning:    false,
+		Base:        worker.NewWorkerBase(wg, id),
+		monitorPath: param.MonitorDirPath,
+		recyclePath: filepath.Join(param.MonitorDirPath, "recycle"),
+		workDirPath: param.WorkDirPath,
 	}
 
-	return &m, nil
+	return &m
 }
 
 func (w *Worker) Start(ctx context.Context) error {
-	if w.isRunning == true {
+	if w.IsRunning == true {
 		return errors.New("monitor already running")
+	}
+
+	if _, err := os.Stat(w.monitorPath); os.IsNotExist(err) {
+		return errors.New("monitor path not exist")
+	}
+
+	if _, err := os.Stat(w.workDirPath); os.IsNotExist(err) {
+		return errors.New("work dir path not exist")
 	}
 
 	if _, err := os.Stat(w.recyclePath); os.IsNotExist(err) {
@@ -75,29 +71,29 @@ func (w *Worker) Start(ctx context.Context) error {
 		}
 	}
 
-	w.isRunning = true
-	w.wg.Add(1)
+	w.IsRunning = true
+	w.Wg.Add(1)
 	go w.workerLoop(ctx)
-	log.Printf("[info] monitor #%d started\n", w.id)
+	log.Printf("[info] %s started\n", w.GetPrettyName())
 
 	return nil
 }
 
-func (w *Worker) GetOutputStream() chan common.Task {
-	return w.outputStream
+func (w *Worker) GetPrettyName() string {
+	return fmt.Sprintf("monitor #%d", w.Id)
 }
 
 func (w *Worker) workerLoop(ctx context.Context) {
 	defer func() {
-		w.isRunning = false
-		w.wg.Done()
-		log.Printf("[info] monitor #%d exited\n", w.id)
+		w.IsRunning = false
+		w.Wg.Done()
+		log.Printf("[info] %s exited\n", w.GetPrettyName())
 	}()
 
 	exitFlag := false
 	for {
 		if exitFlag == true {
-			log.Printf("[info] monitor #%d receive exit signal\n", w.id)
+			log.Printf("[info] %s receive exit signal\n", w.GetPrettyName())
 			break
 		}
 
@@ -106,17 +102,17 @@ func (w *Worker) workerLoop(ctx context.Context) {
 			newTask, err := common.NewTaskFromJson(newTaskPath)
 
 			if err != nil {
-				log.Printf("[error] monitor #%d failed to load task: %s: %s\n", w.id, newTaskPath, err.Error())
+				log.Printf("[error] %s failed to load task: %s: %s\n", w.GetPrettyName(), newTaskPath, err.Error())
 				err = common.MoveFile(ctx, newTaskPath, w.recyclePath)
 				if err != nil {
-					log.Printf("[error] monitor #%d failed to move bad task to recycle bin: %s\n", w.id, err.Error())
+					log.Printf("[error] %s failed to move bad task to recycle bin: %s\n", w.GetPrettyName(), err.Error())
 				}
 				continue
 			}
 
 			newTask.TaskFile = newTaskPath
 
-			log.Printf("[info] monitor #%d load new task: %s\n", w.id, newTaskPath)
+			log.Printf("[info] %s load new task: %s\n", w.GetPrettyName(), newTaskPath)
 			status.SetStatusCode(newTask.Src, status.WAIT)
 			status.SetStatusDesc(newTask.Src, "waiting")
 
@@ -124,7 +120,7 @@ func (w *Worker) workerLoop(ctx context.Context) {
 			case <-ctx.Done():
 				exitFlag = true
 				continue
-			case w.outputStream <- *newTask:
+			case w.OutputStream <- *newTask:
 				continue
 			}
 		}
@@ -157,7 +153,7 @@ func (w *Worker) checkNewTask(ctx context.Context) string {
 				newTaskPath = filepath.Join(dstPath, fileName)
 				break
 			} else {
-				log.Printf("[error] monitor #%d failed to move file: %s\n", w.id, err.Error())
+				log.Printf("[error] %s failed to move file: %s\n", w.GetPrettyName(), err.Error())
 				continue
 			}
 		}
