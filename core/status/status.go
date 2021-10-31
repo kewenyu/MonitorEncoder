@@ -32,6 +32,8 @@ const (
 	WAIT
 	VIDEO
 	MISC
+	MUX
+	FINAL
 	DONE
 )
 

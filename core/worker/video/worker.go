@@ -159,7 +159,7 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 		return err
 	}
 
-	task.AddResultPath(resultPath)
+	task.AddResult(common.NewResult(resultPath, common.ResultVideo, "", 0))
 
 	return nil
 }

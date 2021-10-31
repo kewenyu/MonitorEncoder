@@ -21,8 +21,10 @@ package main
 import (
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
+	"MonitorEncoder/core/worker/final"
 	"MonitorEncoder/core/worker/misc"
 	"MonitorEncoder/core/worker/monitor"
+	"MonitorEncoder/core/worker/mux"
 	"MonitorEncoder/core/worker/video"
 	"MonitorEncoder/web"
 	"bufio"
@@ -87,6 +89,28 @@ func main() {
 	err = miscWorker.Start(mainCtx)
 	if err != nil {
 		fmt.Printf("[fatal] failed to start misc worker: %s\n", err.Error())
+		return
+	}
+
+	muxWorker, err := mux.NewMuxWorker(&wg, &param, miscWorker.GetOutputStream(), 0)
+	if err != nil {
+		log.Printf("[fatal] failed to create mux worker: %s\n", err.Error())
+		return
+	}
+	err = muxWorker.Start(mainCtx)
+	if err != nil {
+		fmt.Printf("[fatal] failed to start mux worker: %s\n", err.Error())
+		return
+	}
+
+	finalWorker, err := final.NewFinalWorker(&wg, &param, muxWorker.GetOutputStream(), 0)
+	if err != nil {
+		log.Printf("[fatal] failed to create final worker: %s\n", err.Error())
+		return
+	}
+	err = finalWorker.Start(mainCtx)
+	if err != nil {
+		fmt.Printf("[fatal] failed to start final worker: %s\n", err.Error())
 		return
 	}
 

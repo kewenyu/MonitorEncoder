@@ -34,6 +34,14 @@ func MoveFile(ctx context.Context, srcPath string, dstPath string) error {
 	return nil
 }
 
+func DeleteFile(ctx context.Context, srcPath string) error {
+	err := exec.CommandContext(ctx, "cmd", "/C", "del", srcPath).Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func GenerateNewFilePath(srcPath string, targetDirPath string, ext string, lang string, track uint) string {
 	newFileName := strings.Replace(srcPath, "\\", "_", -1)
 	newFileName = strings.Replace(newFileName, ":", "_", -1)

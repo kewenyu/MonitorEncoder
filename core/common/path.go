@@ -25,12 +25,14 @@ import (
 )
 
 var binPathMap = map[string]string{
-	"eac3toPath":  "eac3to\\eac3to.exe",
-	"vspipePath":  "vspipe.exe",
-	"x265Path":    "x265-10b.exe",
-	"x264Path":    "x264_64.exe",
-	"opusencPath": "opusenc.exe",
-	"qaacPath":    "qaac.exe",
+	"eac3toPath":   "eac3to\\eac3to.exe",
+	"vspipePath":   "vspipe.exe",
+	"x265Path":     "x265-10b.exe",
+	"x264Path":     "x264_64.exe",
+	"opusencPath":  "opusenc.exe",
+	"qaacPath":     "qaac.exe",
+	"mkvmergePath": "mkvtoolnix\\mkvmerge.exe",
+	"lsmashPath":   "lsmashmuxer.exe",
 }
 
 func init() {
@@ -73,4 +75,12 @@ func GetVspipePath() string {
 
 func GetQaacPath() string {
 	return binPathMap["qaacPath"]
+}
+
+func GetMkvmergePath() string {
+	return binPathMap["mkvmergePath"]
+}
+
+func GetLsmashPath() string {
+	return binPathMap["lsmashPath"]
 }

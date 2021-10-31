@@ -33,13 +33,15 @@ type Task struct {
 	Audio    []AudioTask `json:"audio"`
 	Demux    []DemuxTask `json:"demux"`
 	HardSub  string      `json:"hardsub"`
+	Mux      string      `json:"mux"`
 
-	TotalFrameNum  uint
-	FPSNum         uint
-	FPSDen         uint
-	ScriptFile     string
-	TaskFile       string
-	resultPathList []string
+	TotalFrameNum uint
+	FPSNum        uint
+	FPSDen        uint
+	ScriptFile    string
+	TaskFile      string
+	MuxedFile     string
+	resultList    []Result
 }
 
 type AudioTask struct {
@@ -53,6 +55,20 @@ type DemuxTask struct {
 	Track    uint   `json:"track"`
 	Format   string `json:"format"`
 	Language string `json:"language"`
+}
+
+type ResultCategory int
+
+const (
+	ResultVideo ResultCategory = iota
+	ResultNonVideo
+)
+
+type Result struct {
+	Category ResultCategory
+	Path     string
+	Lang     string
+	Track    uint
 }
 
 func NewTaskFromJson(jsonPath string) (*Task, error) {
@@ -88,15 +104,25 @@ func NewTaskFromJson(jsonPath string) (*Task, error) {
 		return nil, errors.New("failed to unmarshal json task: " + err.Error())
 	}
 
-	task.resultPathList = make([]string, 0)
+	task.resultList = make([]Result, 0)
 
 	return &task, nil
 }
 
-func (t Task) GetResultPathList() []string {
-	return t.resultPathList
+func (t Task) GetResultList() []Result {
+	return t.resultList
 }
 
-func (t *Task) AddResultPath(path string) {
-	t.resultPathList = append(t.resultPathList, path)
+func (t *Task) AddResult(result Result) {
+	t.resultList = append(t.resultList, result)
+}
+
+func NewResult(path string, category ResultCategory, lang string, track uint) Result {
+	r := Result{
+		Category: category,
+		Path:     path,
+		Lang:     lang,
+		Track:    track,
+	}
+	return r
 }

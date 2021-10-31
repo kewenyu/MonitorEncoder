@@ -55,6 +55,7 @@ func NewMiscWorker(wg *sync.WaitGroup, param *common.Parameter, inputStream <-ch
 		workDirPath:   param.WorkDirPath,
 		outputDirPath: param.OutputDirPath,
 		inputStream:   inputStream,
+		outputStream:  make(chan common.Task),
 		isRunning:     false,
 	}
 
@@ -100,6 +101,13 @@ func (w *Worker) workerLoop(ctx context.Context) {
 				continue
 			}
 			log.Printf("[info] misc worker #%d finish task: %s\n", w.id, task.Src)
+
+			select {
+			case <-ctx.Done():
+				exitFlag = true
+				continue
+			case w.outputStream <- task:
+			}
 		}
 
 		runtime.Gosched()
@@ -140,7 +148,7 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 			return err
 		}
 
-		task.AddResultPath(audioPath)
+		task.AddResult(common.NewResult(audioPath, common.ResultNonVideo, audioTask.Language, audioTask.Track))
 
 		runtime.Gosched()
 	}
@@ -157,27 +165,10 @@ func (w *Worker) handleNewTask(ctx context.Context, task *common.Task) error {
 			return err
 		}
 
-		task.AddResultPath(outputPath)
+		task.AddResult(common.NewResult(outputPath, common.ResultNonVideo, demuxTask.Language, demuxTask.Track))
 
 		runtime.Gosched()
 	}
-
-	status.SetStatusDesc(srcFile, "moving output files to output dir")
-
-	moveFileList := task.GetResultPathList()
-	moveFileList = append(moveFileList, task.TaskFile)
-	moveFileList = append(moveFileList, task.ScriptFile)
-	for _, outputPath := range moveFileList {
-		err := common.MoveFile(ctx, outputPath, w.outputDirPath)
-		if err != nil {
-			status.SetStatusCode(srcFile, status.ERROR)
-			status.SetStatusDesc(srcFile, err.Error())
-			return err
-		}
-	}
-
-	status.SetStatusCode(srcFile, status.DONE)
-	status.SetStatusDesc(srcFile, "all done")
 
 	return nil
 }
