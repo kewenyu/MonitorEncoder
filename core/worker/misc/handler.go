@@ -105,7 +105,7 @@ func handlerAAC(ctx context.Context, srcPath string, workDirPath string, audioTa
 		return "", errors.New("invalid bitrate setting for aac codec")
 	}
 	bitrate := fmt.Sprintf("%d", audioTask.Bitrate)
-	qaacParam := []string{"-R", "--adts", "-v", bitrate, "-o", outputPath, "-"}
+	qaacParam := []string{"--adts", "-v", bitrate, "-o", outputPath, "-"}
 
 	eac3toPath := common.GetEac3toPath()
 	eac3toProcess := exec.CommandContext(ctx, eac3toPath, eac3toParam...)
