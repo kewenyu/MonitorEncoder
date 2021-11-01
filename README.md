@@ -9,14 +9,15 @@ Since it primarily focuses on BDMV transcoding, the input file is assumed to be 
 ### Features
 
 * basic vpy script generation based on given templates
-* multiformat encoding/demuxing
+* multiformat encoding/demuxing/muxing
     * video encoding: HEVC, AVC
     * audio encoding: FLAC, OPUS, AAC
     * demuxing: anything supported by eac3to
+    * muxing: MKV, MP4
 * multiple workers
 * basic http interface for remote encoding
 
-## Install
+## Build
 
 ```
 cd MonitorEncoder
@@ -24,6 +25,10 @@ go build -o build\MonitorEncoder.exe .\cli
 ```
 
 ## Usage
+
+### Basic Usage
+
+Copy/upload your task config file into the monitor directory. Then the task will be automatically started if there is free worker available. The output files will be copied to the output directory after finishing the task.
 
 ### Command line arguments
 
@@ -61,6 +66,8 @@ Caution: no authentication yet! Use in the local network only.
     * %MONITOR_ENCODER_BIN_PATH%\x264_64.exe
     * %MONITOR_ENCODER_BIN_PATH%\opusenc.exe
     * %MONITOR_ENCODER_BIN_PATH%\qaac.exe
+    * %MONITOR_ENCODER_BIN_PATH%\mkvtoolnix\mkvmerge.exe
+    * %MONITOR_ENCODER_BIN_PATH%\lsmashmuxer.exe
 
 ### VapourSynth Template
 
