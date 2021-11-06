@@ -47,6 +47,9 @@ Copy/upload your task config file into the monitor directory. Then the task will
     * print current status on command prompt
 * stop
     * stop the program gracefully
+* activetime HH:MM:SS-HH:MM:SS
+    * example: activetime 13:00:00-20:00:00
+    * to disable the active time setting, simply set the begin time equal to end time
 
 ### Http Interface
 
