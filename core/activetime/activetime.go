@@ -32,12 +32,12 @@ var (
 	activeTimeStr = "00:00:00-00:00:00"
 	activeTime    ActiveTime
 	continueChan  = make(chan struct{})
-	cancelChan    = make(chan struct{})
+	resetChan     = make(chan struct{})
 )
 
 func init() {
 	activeTime, _ = parseActiveTimeStr(activeTimeStr)
-	go continueApproveLoop(cancelChan)
+	go continueApproveLoop(resetChan)
 }
 
 func SetActiveTime(s string) error {
@@ -49,9 +49,9 @@ func SetActiveTime(s string) error {
 	activeTime = newActiveTime
 	activeTimeStr = s
 
-	close(cancelChan)
-	cancelChan = make(chan struct{})
-	go continueApproveLoop(cancelChan)
+	select {
+	case resetChan <- struct{}{}:
+	}
 
 	return nil
 }
@@ -90,25 +90,56 @@ func parseActiveTimeStr(s string) (ActiveTime, error) {
 	return newActiveTime, nil
 }
 
-func continueApproveLoop(cancelChan <-chan struct{}) {
-	if !isActiveTimeDisable() {
-		log.Printf("[info] active time setting: %s\n", activeTimeStr)
-		for {
-			if !isInActiveTime() {
-				remainTimeToBegin := getTimeToBegin()
-				log.Printf("[info] not in active time. remaining %.2f seconds to begin\n", remainTimeToBegin.Seconds())
-				timeToBeginOut := time.After(remainTimeToBegin)
-				select {
-				case <-timeToBeginOut:
-					log.Printf("[info] active time begin\n")
+func continueApproveLoop(resetChan <-chan struct{}) {
+	for {
+		if !isActiveTimeDisable() {
+			log.Printf("[info] active time setting: %s\n", activeTimeStr)
+			outerExitFlag := false
+			for {
+				if outerExitFlag {
 					break
 				}
+
+				if !isInActiveTime() {
+					remainTimeToBegin := getTimeToBegin()
+					log.Printf("[info] not in active time. remaining %.2f seconds to begin\n", remainTimeToBegin.Seconds())
+					timeToBeginOut := time.NewTimer(remainTimeToBegin)
+					select {
+					case <-resetChan:
+						timeToBeginOut.Stop()
+						outerExitFlag = true
+						continue
+					case <-timeToBeginOut.C:
+						log.Printf("[info] active time begin\n")
+					}
+				}
+
+				remainTimeToEnd := getTimeToEnd()
+				log.Printf("[info] in active time. remaining %.2f seconds to end\n", remainTimeToEnd.Seconds())
+				timeToEndOut := time.NewTimer(remainTimeToEnd)
+
+				exitFlag := false
+				for {
+					if exitFlag {
+						timeToEndOut.Stop()
+						break
+					}
+
+					select {
+					case <-resetChan:
+						exitFlag = true
+						outerExitFlag = true
+						continue
+					case <-continueChan:
+					case <-timeToEndOut.C:
+						log.Printf("[info] active time is up\n")
+						exitFlag = true
+						continue
+					}
+				}
 			}
-
-			remainTimeToEnd := getTimeToEnd()
-			log.Printf("[info] in active time. remaining %.2f seconds to end\n", remainTimeToEnd.Seconds())
-			timeToEndOut := time.After(remainTimeToEnd)
-
+		} else {
+			log.Printf("[info] active time is disable\n")
 			exitFlag := false
 			for {
 				if exitFlag {
@@ -116,30 +147,11 @@ func continueApproveLoop(cancelChan <-chan struct{}) {
 				}
 
 				select {
-				case <-cancelChan:
+				case <-resetChan:
 					exitFlag = true
 					continue
 				case <-continueChan:
-				case <-timeToEndOut:
-					log.Printf("[info] active time is up\n")
-					exitFlag = true
-					continue
 				}
-			}
-		}
-	} else {
-		log.Printf("[info] active time is disable\n")
-		exitFlag := false
-		for {
-			if exitFlag {
-				break
-			}
-
-			select {
-			case <-cancelChan:
-				exitFlag = true
-				continue
-			case <-continueChan:
 			}
 		}
 	}
