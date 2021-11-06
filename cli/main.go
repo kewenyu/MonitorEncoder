@@ -37,6 +37,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -49,7 +50,7 @@ func main() {
 	flag.StringVar(&param.OutputDirPath, "od", "output_dir", "output dir")
 	flag.StringVar(&param.Ip, "ip", "127.0.0.1", "web interface's ip")
 	flag.StringVar(&param.Port, "port", "8899", "web interface's port")
-	flag.StringVar(&param.ActiveTime, "at", "00:00:00-00:00:00", "active time (HH:MM:SS-HH:MM:SS)")
+	flag.StringVar(&param.ActiveTime, "at", "", "active time (HH:MM:SS-HH:MM:SS)")
 	flag.Parse()
 
 	err := common.CheckToolsAvailability()
@@ -85,10 +86,11 @@ func main() {
 		}
 	}
 
-	err = activetime.SetActiveTime(param.ActiveTime)
-	if err != nil {
-		log.Printf("[fatal] failed to config active timer: %s\n", err.Error())
-		return
+	if param.ActiveTime != "" {
+		err = activetime.SetActiveTime(param.ActiveTime)
+		if err != nil {
+			log.Printf("[error] failed to config active timer: %s\n", err.Error())
+		}
 	}
 
 	err = web.StartWeb(&param)
@@ -136,8 +138,14 @@ mainLoop:
 			} else if userInput == "stop" {
 				log.Println("[info] user stop")
 				break mainLoop
+			} else if match := regexp.MustCompile(`activetime (\S+)`).FindStringSubmatch(userInput); len(match) == 2 {
+				err := activetime.SetActiveTime(match[1])
+				if err != nil {
+					log.Printf("[error] failed to config active timer: %s\n", err.Error())
+				}
+				continue
 			} else {
-				fmt.Printf("unknown command: %s\n", userInput)
+				fmt.Printf("invalid command: %s\n", userInput)
 				continue
 			}
 		}

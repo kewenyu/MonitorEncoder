@@ -29,21 +29,29 @@ import (
 type ActiveTime [6]int
 
 var (
-	activeTimeStr string
+	activeTimeStr = "00:00:00-00:00:00"
 	activeTime    ActiveTime
 	continueChan  = make(chan struct{})
+	cancelChan    = make(chan struct{})
 )
 
 func init() {
+	activeTime, _ = parseActiveTimeStr(activeTimeStr)
+	go continueApproveLoop(cancelChan)
 }
 
-func SetActiveTime(activeTimeStr string) error {
-	err := parseActiveTimeStr(activeTimeStr)
+func SetActiveTime(s string) error {
+	newActiveTime, err := parseActiveTimeStr(s)
 	if err != nil {
 		return err
 	}
 
-	go continueApproveLoop()
+	activeTime = newActiveTime
+	activeTimeStr = s
+
+	close(cancelChan)
+	cancelChan = make(chan struct{})
+	go continueApproveLoop(cancelChan)
 
 	return nil
 }
@@ -52,37 +60,37 @@ func IsContinue() chan<- struct{} {
 	return continueChan
 }
 
-func parseActiveTimeStr(s string) error {
+func parseActiveTimeStr(s string) (ActiveTime, error) {
 	regMatcher := regexp.MustCompile(`(\d+):(\d+):(\d+)-(\d+):(\d+):(\d+)`)
 	regMatchResult := regMatcher.FindStringSubmatch(s)
 	if len(regMatchResult) != 7 {
-		return errors.New("invalid active time format")
+		return ActiveTime{}, errors.New("invalid active time format")
 	}
+
+	newActiveTime := [6]int{}
 
 	for i := 1; i <= 6; i++ {
 		value, err := strconv.ParseInt(regMatchResult[i], 10, 32)
 		if err != nil {
-			return err
+			return ActiveTime{}, err
 		}
-		activeTime[i-1] = int(value)
+		newActiveTime[i-1] = int(value)
 	}
 
-	for i, v := range activeTime {
+	for i, v := range newActiveTime {
 		if (i == 0 || i == 3) && v >= 24 {
-			return errors.New("invalid active time value")
+			return ActiveTime{}, errors.New("invalid active time value")
 		}
 
 		if v < 0 || v >= 60 {
-			return errors.New("invalid active time value")
+			return ActiveTime{}, errors.New("invalid active time value")
 		}
 	}
 
-	activeTimeStr = s
-
-	return nil
+	return newActiveTime, nil
 }
 
-func continueApproveLoop() {
+func continueApproveLoop(cancelChan <-chan struct{}) {
 	if !isActiveTimeDisable() {
 		log.Printf("[info] active time setting: %s\n", activeTimeStr)
 		for {
@@ -101,20 +109,36 @@ func continueApproveLoop() {
 			log.Printf("[info] in active time. remaining %.2f seconds to end\n", remainTimeToEnd.Seconds())
 			timeToEndOut := time.After(remainTimeToEnd)
 
-		approveLoop:
+			exitFlag := false
 			for {
+				if exitFlag {
+					break
+				}
+
 				select {
+				case <-cancelChan:
+					exitFlag = true
+					continue
 				case <-continueChan:
 				case <-timeToEndOut:
 					log.Printf("[info] active time is up\n")
-					break approveLoop
+					exitFlag = true
+					continue
 				}
 			}
 		}
 	} else {
 		log.Printf("[info] active time is disable\n")
+		exitFlag := false
 		for {
+			if exitFlag {
+				break
+			}
+
 			select {
+			case <-cancelChan:
+				exitFlag = true
+				continue
 			case <-continueChan:
 			}
 		}
