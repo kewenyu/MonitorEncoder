@@ -19,6 +19,7 @@
 package video
 
 import (
+	"MonitorEncoder/core/activetime"
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
 	"MonitorEncoder/core/worker"
@@ -36,7 +37,7 @@ import (
 
 type Worker struct {
 	*worker.Base
-	workDirPath  string
+	workDirPath string
 }
 
 func NewVideoWorker(wg *sync.WaitGroup, param *common.Parameter, id uint) *Worker {
@@ -85,6 +86,13 @@ func (w *Worker) workerLoop(ctx context.Context) {
 		if exitFlag == true {
 			log.Printf("[info] %s receive exit signal\n", w.GetPrettyName())
 			break
+		}
+
+		select {
+		case <-ctx.Done():
+			exitFlag = true
+			continue
+		case activetime.IsContinue() <- struct{}{}:
 		}
 
 		select {

@@ -25,4 +25,5 @@ type Parameter struct {
 	OutputDirPath  string
 	Ip             string
 	Port           string
+	ActiveTime     string
 }

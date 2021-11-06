@@ -19,6 +19,7 @@
 package monitor
 
 import (
+	"MonitorEncoder/core/activetime"
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
 	"MonitorEncoder/core/worker"
@@ -95,6 +96,13 @@ func (w *Worker) workerLoop(ctx context.Context) {
 		if exitFlag == true {
 			log.Printf("[info] %s receive exit signal\n", w.GetPrettyName())
 			break
+		}
+
+		select {
+		case <-ctx.Done():
+			exitFlag = true
+			continue
+		case activetime.IsContinue() <- struct{}{}:
 		}
 
 		newTaskPath := w.checkNewTask(ctx)

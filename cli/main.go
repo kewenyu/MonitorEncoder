@@ -19,6 +19,7 @@
 package main
 
 import (
+	"MonitorEncoder/core/activetime"
 	"MonitorEncoder/core/common"
 	"MonitorEncoder/core/status"
 	"MonitorEncoder/core/worker"
@@ -48,6 +49,7 @@ func main() {
 	flag.StringVar(&param.OutputDirPath, "od", "output_dir", "output dir")
 	flag.StringVar(&param.Ip, "ip", "127.0.0.1", "web interface's ip")
 	flag.StringVar(&param.Port, "port", "8899", "web interface's port")
+	flag.StringVar(&param.ActiveTime, "at", "00:00:00-00:00:00", "active time (HH:MM:SS-HH:MM:SS)")
 	flag.Parse()
 
 	err := common.CheckToolsAvailability()
@@ -81,6 +83,12 @@ func main() {
 			log.Printf("[fatal] failed to start %s: %s\n", w.GetPrettyName(), err.Error())
 			return
 		}
+	}
+
+	err = activetime.SetActiveTime(param.ActiveTime)
+	if err != nil {
+		log.Printf("[fatal] failed to config active timer: %s\n", err.Error())
+		return
 	}
 
 	err = web.StartWeb(&param)
