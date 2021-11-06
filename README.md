@@ -16,6 +16,7 @@ Since it primarily focuses on BDMV transcoding, the input file is assumed to be 
     * muxing: MKV, MP4
 * multiple workers
 * basic http interface for remote encoding
+* active time setting (tasks will only be processed within given time period)
 
 ## Build
 
@@ -38,6 +39,7 @@ Copy/upload your task config file into the monitor directory. Then the task will
 * -od: output directory path (default: "output_dir")
 * -ip: ip address that http interface listening on (default: "127.0.0.1")
 * -port: port for http interface (default: "8899")
+* -at: active time setting (default: "00:00:00-00:00:00")
 
 ### Interactive Command
 
