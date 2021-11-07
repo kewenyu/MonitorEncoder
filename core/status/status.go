@@ -46,14 +46,11 @@ type Status struct {
 
 var (
 	statusMap  = make(map[string]*Status)
-	taskIdLock sync.Mutex
+	statusLock sync.Mutex
 	taskId     uint64 = 0
 )
 
-func NewStatus(srcFile string) *Status {
-	taskIdLock.Lock()
-	defer taskIdLock.Unlock()
-
+func newStatus(srcFile string) *Status {
 	taskId += 1
 
 	return &Status{
@@ -65,22 +62,31 @@ func NewStatus(srcFile string) *Status {
 }
 
 func SetStatusCode(srcFile string, code Code) {
+	statusLock.Lock()
+	defer statusLock.Unlock()
+
 	_, exist := statusMap[srcFile]
 	if !exist {
-		statusMap[srcFile] = NewStatus(srcFile)
+		statusMap[srcFile] = newStatus(srcFile)
 	}
 	statusMap[srcFile].Code = code
 }
 
 func SetStatusDesc(srcFile string, desc string) {
+	statusLock.Lock()
+	defer statusLock.Unlock()
+
 	_, exist := statusMap[srcFile]
 	if !exist {
-		statusMap[srcFile] = NewStatus(srcFile)
+		statusMap[srcFile] = newStatus(srcFile)
 	}
 	statusMap[srcFile].Desc = desc
 }
 
 func PrintAllStatus() {
+	statusLock.Lock()
+	defer statusLock.Unlock()
+
 	fmt.Printf("----------------- Status ----------------\n")
 	for srcFile, status := range statusMap {
 		fmt.Printf("%s:\t\t%s\n", srcFile, status.Desc)
@@ -89,13 +95,16 @@ func PrintAllStatus() {
 }
 
 func GetAllStatus() []Status {
+	statusLock.Lock()
+	defer statusLock.Unlock()
+
 	statusList := make([]Status, 0)
 
 	for _, status := range statusMap {
 		statusList = append(statusList, *status)
 	}
 
-	sort.Slice(statusList, func (i int, j int) bool{
+	sort.Slice(statusList, func(i int, j int) bool {
 		return statusList[i].Id < statusList[j].Id
 	})
 
@@ -103,6 +112,9 @@ func GetAllStatus() []Status {
 }
 
 func GetAllStatusJson() []byte {
+	statusLock.Lock()
+	defer statusLock.Unlock()
+
 	data, err := json.Marshal(statusMap)
 	if err != nil {
 		return nil
