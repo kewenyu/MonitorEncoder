@@ -81,7 +81,7 @@ func main() {
 	for _, w := range workerSequence {
 		startErr = w.Start(mainCtx)
 		if startErr != nil {
-			log.Printf("[fatal] failed to start %s: %s\n", w.GetPrettyName(), err.Error())
+			log.Printf("[fatal] failed to start %s: %s\n", w.GetPrettyName(), startErr.Error())
 			return
 		}
 	}
